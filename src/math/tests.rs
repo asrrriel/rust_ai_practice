@@ -1,7 +1,7 @@
 use super::tensor::*;
 
 #[test]
-fn test_zeroes() {
+fn tensor_zeroes() {
     let t: Tensor<f32,1> =  Tensor::zeroes([3]);
     assert_eq!(t.data,[0.,0.,0.]);
 
@@ -10,7 +10,7 @@ fn test_zeroes() {
 }
 
 #[test]
-fn test_values() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_values() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![0.,1.,2.];
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
     assert_eq!(t.data,val);
@@ -23,7 +23,7 @@ fn test_values() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_add_scalar() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_add_scalar() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![0.,1.,2.];
     let mut t: Tensor<f32,1> =  Tensor::values([3],&val)?;
 
@@ -40,7 +40,7 @@ fn test_add_scalar() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_sub_scalar() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_sub_scalar() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![0.,1.,2.];
     let mut t: Tensor<f32,1> =  Tensor::values([3],&val)?;
 
@@ -57,7 +57,7 @@ fn test_sub_scalar() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_mul_scalar() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_mul_scalar() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![0.,1.,2.];
     let mut t: Tensor<f32,1> =  Tensor::values([3],&val)?;
 
@@ -74,7 +74,7 @@ fn test_mul_scalar() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_div_scalar() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_div_scalar() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![0.,2.,4.];
     let mut t: Tensor<f32,1> =  Tensor::values([3],&val)?;
 
@@ -91,7 +91,7 @@ fn test_div_scalar() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_add() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_add() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![0.,1.,2.];
     let val2 = vec![2.,1.,0.];
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
@@ -104,7 +104,7 @@ fn test_add() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_mul() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_mul() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![5.,4.,2.];
     let val2 = vec![2.,1.,3.];
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
@@ -117,7 +117,7 @@ fn test_mul() -> Result<(),Box<dyn std::error::Error>> {
 }
 
 #[test]
-fn test_shape_mismatch() -> Result<(),Box<dyn std::error::Error>> {
+fn tensor_shape_mismatch() -> Result<(),Box<dyn std::error::Error>> {
     let val = vec![5.,4.,2.];
     let val2 = vec![2.,1.,3.,4.];
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
@@ -129,6 +129,29 @@ fn test_shape_mismatch() -> Result<(),Box<dyn std::error::Error>> {
         Err(e) => e.as_ref().is::<TensorError>(),
         _ => false
     });
+
+    Ok(())
+}
+
+#[test]
+fn tensor_index() -> Result<(),Box<dyn std::error::Error>> {
+    let val_2d = vec![0.,1.,2.,3.,4.,5.];
+    let mut _2d: Tensor<f32,2> =  Tensor::values([2,3],&val_2d)?;
+    assert_eq!(_2d[[0,0]],0.);
+    assert_eq!(_2d[[0,1]],1.);
+    assert_eq!(_2d[[0,2]],2.);
+    assert_eq!(_2d[[1,0]],3.);
+    assert_eq!(_2d[[1,1]],4.);
+    assert_eq!(_2d[[1,2]],5.);
+
+    Ok(())
+}
+
+#[test]
+fn tensor_index_oob() -> Result<(),Box<dyn std::error::Error>> {
+    let val_2d = vec![0.,1.,2.,3.,4.,5.];
+    let mut _2d: Tensor<f32,2> =  Tensor::values([2,3],&val_2d)?;
+    assert!(_2d.get([0,10]).is_err());
 
     Ok(())
 }
