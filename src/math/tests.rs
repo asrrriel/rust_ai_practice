@@ -163,7 +163,7 @@ fn tensor_matmul() -> Result<(),Box<dyn std::error::Error>> {
     let t: Tensor<f32,2> =  Tensor::values([3,2],&val)?;
     let t2: Tensor<f32,2> =  Tensor::values([2,3],&val2)?;
 
-    let t3 = t.matmul(t2)?;
+    let t3 = t.matmul(&t2)?;
     assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.]);
 
     Ok(())
@@ -176,7 +176,7 @@ fn tensor_matmul_batched() -> Result<(),Box<dyn std::error::Error>> {
     let t: Tensor<f32,3> =  Tensor::values([2,3,2],&val)?;
     let t2: Tensor<f32,3> =  Tensor::values([2,2,3],&val2)?;
 
-    let t3 = t.matmul(t2)?;
+    let t3 = t.matmul(&t2)?;
     assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.,3.,4.,5.,9.,14.,19.,15.,24.,33.,]);
 
     Ok(())
@@ -207,7 +207,7 @@ fn tensor_transposed_matmul() -> Result<(),Box<dyn std::error::Error>> {
 
     t2.transpose();
 
-    let t3 = t.matmul(t2)?;
+    let t3 = t.matmul(&t2)?;
     assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.]);
 
     Ok(())

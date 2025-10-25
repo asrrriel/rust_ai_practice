@@ -1,6 +1,7 @@
 use std::ops::AddAssign;
 use std::usize;
 use std::ops::Add;
+use std::ops::Sub;
 use std::ops::Mul;
 use std::ops::Index;
 use strum_macros::Display;
@@ -16,6 +17,7 @@ pub enum TensorError {
 
 impl std::error::Error for TensorError {}
 
+#[derive(Clone)]
 pub struct Tensor<T: Float,const R: usize> {
     rank: usize,
     shape: [usize; R],
@@ -112,7 +114,7 @@ impl<T: Float,const R: usize> Tensor<T,R>{
         Ok(idx)
     }
 
-    fn shape(&self) -> Vec<usize> {
+    pub fn shape(&self) -> Vec<usize> {
         match self.transposed {
             false => Vec::from(self.shape),
             true => {
@@ -197,6 +199,37 @@ impl<'a,T: Float,const R: usize> Add<&'a Tensor<T, R>> for &'a Tensor<T,R> {
     }
 }
 
+//piecewise subtraction opeartor
+impl<'a,T: Float,const R: usize> Sub<&'a Tensor<T, R>> for &'a Tensor<T,R> {
+    type Output = Result<Tensor<T,R>,TensorError>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let myshape = self.shape();
+        let othershape = rhs.shape();
+
+        if self.rank != rhs.rank || myshape != othershape{
+            return Err(TensorError::ShapeMismatch)
+        }
+
+        let mut newtensor = Tensor::zeroes(*match myshape.as_array(){
+            Some(v) => v,
+            None => return Err(TensorError::OprationFailed) 
+        });
+
+        for i in 0..newtensor.data.len() {
+            let index = *match idx_to_coords(i, &myshape).as_array() {
+                Some(v) => v,
+                None => return Err(TensorError::OprationFailed) 
+            }; // map linear i to multi-dimensional index
+            let a_idx = self.offset(index)?;
+            let b_idx = rhs.offset(index)?;
+            newtensor.data[i] = self.data[a_idx] - rhs.data[b_idx];
+        }
+
+        Ok(newtensor)
+    }
+}
+
 //piecewise multiplication opeartor
 impl<'a,T: Float,const R: usize> Mul<&'a Tensor<T, R>> for &'a Tensor<T,R> {
     type Output = Result<Tensor<T,R>,TensorError>;
@@ -230,38 +263,18 @@ impl<'a,T: Float,const R: usize> Mul<&'a Tensor<T, R>> for &'a Tensor<T,R> {
 
 //matrix multiplication
 impl<T: Float + AddAssign,const R: usize> Tensor<T,R>{
-    pub fn matmul(&self, other: Tensor<T,R>) -> Result<Tensor<T,R>,TensorError> {
+    pub fn matmul(&self, other: &Tensor<T,R>) -> Result<Tensor<T,R>,TensorError> {
         //Rank has to be at or above 2 as matrix multiplication is undefined for vectors
         assert!(R >= 2, "Vectors(R=1) cannot be multiplied via matmul");
 
-        let myshape = match self.transposed {
-            false => self.shape,
-            true => {
-                let mut temp = [0; R];
-
-                temp.copy_from_slice(&self.shape[0..R]);
-
-                let t = temp[R-1];
-                temp[R-1] = temp[R-2];
-                temp[R-2] = t;
-
-                temp
-            }
+        let myshape: [usize; R] = match self.shape().as_array(){
+            Some(v) => *v,
+            None => return Err(TensorError::OprationFailed) 
         };
 
-        let othershape = match other.transposed {
-            false => other.shape,
-            true => {
-                let mut temp = [0; R];
-
-                temp.copy_from_slice(&other.shape[0..R]);
-
-                let t = temp[R-1];
-                temp[R-1] = temp[R-2];
-                temp[R-2] = t;
-
-                temp
-            }
+        let othershape: [usize; R] = match other.shape().as_array(){
+            Some(v) => *v,
+            None => return Err(TensorError::OprationFailed) 
         };
 
         //batch dimensions must be the exact same shape and M and N has to be 
@@ -323,6 +336,66 @@ impl<T: Float + AddAssign,const R: usize> Tensor<T,R>{
     }
 }
 
+//matrix-vector multiplication
+impl<T: Float + AddAssign> Tensor<T,2>{
+    pub fn matmul_matvec(&self, other: &Tensor<T,1>) -> Result<Tensor<T,1>,TensorError> {
+        let myshape: [usize; 2] = match self.shape().as_array(){
+            Some(v) => *v,
+            None => return Err(TensorError::OprationFailed) 
+        };
+
+        let othershape: [usize; 1] = match other.shape().as_array(){
+            Some(v) => *v,
+            None => return Err(TensorError::OprationFailed) 
+        };
+
+        //the shared axis has to be there
+        if myshape[1] != othershape[0] {
+            return Err(TensorError::ShapeMismatch)
+        }
+
+        let newshape: [usize; 1] = [myshape[0]];
+
+        let mut newtensor = Tensor::<T,1>::zeroes(newshape);
+
+        for i in 0..newshape[0] {
+            let mut sum: T = T::zero();
+            for k in 0..myshape[1] {
+                sum += *self.get([i,k])? * *other.get([k])?
+            } 
+            newtensor.set([i],sum)?;
+        } 
+
+        Ok(newtensor)
+    }
+}
+
+//outer product
+impl<T: Float> Tensor<T,1>{
+    pub fn outer(&self, other: &Tensor<T,1>) -> Result<Tensor<T,2>,TensorError> {
+        let myshape: [usize; 1] = match self.shape().as_array(){
+            Some(v) => *v,
+            None => return Err(TensorError::OprationFailed) 
+        };
+
+        let othershape: [usize; 1] = match other.shape().as_array(){
+            Some(v) => *v,
+            None => return Err(TensorError::OprationFailed) 
+        };
+
+        let newshape: [usize; 2] = [myshape[0],othershape[0]];
+        let mut newtensor = Tensor::zeroes(newshape);
+
+        for i in 0..newshape[0] {
+            for j in 0..newshape[1] {
+                newtensor.set([i,j],*self.get([i])? * *other.get([j])?)?;
+            }
+        }
+        Ok(newtensor)
+    }
+}
+
+
 //matrix transposition
 impl<T: Float,const R: usize> Tensor<T,R>{
     pub fn transpose(&mut self) {
@@ -330,5 +403,11 @@ impl<T: Float,const R: usize> Tensor<T,R>{
         assert!(R >= 2, "Vectors(R=1) cannot be transposed");
 
         self.transposed = !self.transposed
+    }
+}
+
+impl<T: Float + std::fmt::Debug,const R: usize> std::fmt::Display for Tensor<T,R>{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f,"{0:?}",self.data)
     }
 }
