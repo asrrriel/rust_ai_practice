@@ -19,7 +19,8 @@ impl std::error::Error for TensorError {}
 pub struct Tensor<T: Float,const R: usize> {
     rank: usize,
     shape: [usize; R],
-    pub data: Vec<T>
+    pub data: Vec<T>,
+    transposed: bool // swaps last 2 dimensions on index if true
 }
 
 //constructors
@@ -31,7 +32,8 @@ impl<T: Float,const R: usize> Tensor<T,R>{
         Tensor {
             rank: R,
             shape: dim,
-            data: vec
+            data: vec,
+            transposed: false
         }
     }
 
@@ -43,7 +45,8 @@ impl<T: Float,const R: usize> Tensor<T,R>{
         Ok(Tensor {
             rank: R,
             shape: dim,
-            data: val.clone()
+            data: val.clone(),
+            transposed: false
         })
     }
 }
@@ -78,8 +81,23 @@ impl<T: Float + std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign 
 
 //safe getter and setter
 impl<T: Float,const R: usize> Tensor<T,R>{
-    pub fn get(&self, index: [usize; R]) -> Result<&T,TensorError> {
-        println!("{index:?}");
+    pub fn get(&self, _index: [usize; R]) -> Result<&T,TensorError> {
+
+        let index = match self.transposed {
+            false => _index,
+            true => {
+                let mut temp = [0; R];
+
+                temp.copy_from_slice(&_index[0..R]);
+
+                let t = temp[R-1];
+                temp[R-1] = temp[R-2];
+                temp[R-2] = t;
+
+                temp
+            }
+        };
+
         let mut idx = 0;
         let mut stride = 1;
 
@@ -94,8 +112,23 @@ impl<T: Float,const R: usize> Tensor<T,R>{
         Ok(&self.data[idx])
     }
 
-    pub fn set(&mut self, index: [usize; R], v: T) -> Result<(),TensorError> {
-        println!("{index:?}");
+    pub fn set(&mut self, _index: [usize; R], v: T) -> Result<(),TensorError> {
+
+        let index = match self.transposed {
+            false => _index,
+            true => {
+                let mut temp = [0; R];
+
+                temp.copy_from_slice(&_index[0..R]);
+
+                let t = temp[R-1];
+                temp[R-1] = temp[R-2];
+                temp[R-2] = t;
+
+                temp
+            }
+        };
+
         let mut idx = 0;
         let mut stride = 1;
 
@@ -133,7 +166,8 @@ impl<T: Float,const R: usize> Add for Tensor<T,R> {
         Ok(Tensor{
             rank: self.rank,
             shape: self.shape,
-            data: data
+            data: data,
+            transposed: false
         })
     }
 }
@@ -157,7 +191,8 @@ impl<T: Float,const R: usize> Mul for Tensor<T,R> {
         Ok(Tensor{
             rank: self.rank,
             shape: self.shape,
-            data: data
+            data: data,
+            transposed: false
         })
     }
 }
@@ -190,8 +225,38 @@ impl<T: Float + AddAssign,const R: usize> Tensor<T,R>{
         //Rank has to be at or above 2 as matrix multiplication is undefined for vectors
         assert!(R >= 2, "Vectors(R=1) cannot be multiplied via matmul");
 
+        let myshape = match self.transposed {
+            false => self.shape,
+            true => {
+                let mut temp = [0; R];
+
+                temp.copy_from_slice(&self.shape[0..R]);
+
+                let t = temp[R-1];
+                temp[R-1] = temp[R-2];
+                temp[R-2] = t;
+
+                temp
+            }
+        };
+
+        let othershape = match other.transposed {
+            false => other.shape,
+            true => {
+                let mut temp = [0; R];
+
+                temp.copy_from_slice(&other.shape[0..R]);
+
+                let t = temp[R-1];
+                temp[R-1] = temp[R-2];
+                temp[R-2] = t;
+
+                temp
+            }
+        };
+
         //batch dimensions must be the exact same shape and M and N has to be 
-        if self.shape[..R-2] != other.shape[..R-2] || self.shape[R - 1] != other.shape[R - 2] {
+        if myshape[..R-2] != othershape[..R-2] || myshape[R - 1] != othershape[R - 2] {
             return Err(TensorError::ShapeMismatch)
         }
 
@@ -199,14 +264,14 @@ impl<T: Float + AddAssign,const R: usize> Tensor<T,R>{
 
         newshape[..R-2].copy_from_slice(&self.shape[..R-2]);
 
-        newshape[R-2] = self.shape[R-2];
-        newshape[R-1] = other.shape[R-1];
+        newshape[R-2] = myshape[R-2];
+        newshape[R-1] = othershape[R-1];
 
-        let batch_size = self.shape[..R-2].iter().product::<usize>();
+        let batch_size = myshape[..R-2].iter().product::<usize>();
         let mut newtensor = Tensor::zeroes(newshape);
 
         for b in 0..batch_size{
-            let batch_coords = idx_to_coords(b, &self.shape[..R-2]);
+            let batch_coords = idx_to_coords(b, &myshape[..R-2]);
 
             let mut c_coords: [usize; R] = {
                 let mut tmp = [0; R];
@@ -219,7 +284,7 @@ impl<T: Float + AddAssign,const R: usize> Tensor<T,R>{
             for i in 0..newshape[R-2] {
                 for j in 0..newshape[R-1] {
                     let mut sum: T = T::zero();
-                    for k in 0..self.shape[R-1] {
+                    for k in 0..myshape[R-1] {
 
                         let a_coords: [usize; R] = {
                             let mut tmp = [0; R];
@@ -246,5 +311,15 @@ impl<T: Float + AddAssign,const R: usize> Tensor<T,R>{
             } 
         }
         Ok(newtensor)
+    }
+}
+
+//matrix transposition
+impl<T: Float,const R: usize> Tensor<T,R>{
+    pub fn transpose(&mut self) {
+        //Rank has to be at or above 2 as transposition does jack for vectors
+        assert!(R >= 2, "Vectors(R=1) cannot be transposed");
+
+        self.transposed = !self.transposed
     }
 }

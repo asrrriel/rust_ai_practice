@@ -181,3 +181,34 @@ fn tensor_matmul_batched() -> Result<(),Box<dyn std::error::Error>> {
 
     Ok(())
 }
+#[test]
+fn tensor_transposed() -> Result<(),Box<dyn std::error::Error>> {
+    let val_2d = vec![0.,1.,2.,3.,4.,5.];
+    let mut _2d: Tensor<f32,2> =  Tensor::values([2,3],&val_2d)?;
+
+    _2d.transpose();
+
+    assert_eq!(_2d[[0,0]],0.);
+    assert_eq!(_2d[[1,0]],1.);
+    assert_eq!(_2d[[2,0]],2.);
+    assert_eq!(_2d[[0,1]],3.);
+    assert_eq!(_2d[[1,1]],4.);
+    assert_eq!(_2d[[2,1]],5.);
+
+    Ok(())
+}
+
+#[test]
+fn tensor_transposed_matmul() -> Result<(),Box<dyn std::error::Error>> {
+    let val = vec![0.,1.,2.,3.,4.,5.];
+    let val2 = vec![0.,3.,1.,4.,2.,5.];
+    let t: Tensor<f32,2> =  Tensor::values([3,2],&val)?;
+    let mut t2: Tensor<f32,2> =  Tensor::values([3,2],&val2)?;
+
+    t2.transpose();
+
+    let t3 = t.matmul(t2)?;
+    assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.]);
+
+    Ok(())
+}
