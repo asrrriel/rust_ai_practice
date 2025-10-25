@@ -97,7 +97,7 @@ fn tensor_add() -> Result<(),Box<dyn std::error::Error>> {
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
     let t2: Tensor<f32,1> =  Tensor::values([3],&val2)?;
 
-    let t3 = (t + t2)?;
+    let t3 = (&t + &t2)?;
     assert_eq!(t3.data,[2.,2.,2.]);
 
     Ok(())
@@ -110,7 +110,7 @@ fn tensor_mul() -> Result<(),Box<dyn std::error::Error>> {
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
     let t2: Tensor<f32,1> =  Tensor::values([3],&val2)?;
 
-    let t3 = (t * t2)?;
+    let t3 = (&t * &t2)?;
     assert_eq!(t3.data,[10.,4.,6.]);
 
     Ok(())
@@ -123,7 +123,7 @@ fn tensor_shape_mismatch() -> Result<(),Box<dyn std::error::Error>> {
     let t: Tensor<f32,1> =  Tensor::values([3],&val)?;
     let t2: Tensor<f32,1> =  Tensor::values([4],&val2)?;
 
-    let t3 = t * t2;
+    let t3 = &t * &t2;
     assert!(t3.is_err());
     assert!(match t3 {
         Err(e) => e == TensorError::ShapeMismatch,
@@ -209,6 +209,54 @@ fn tensor_transposed_matmul() -> Result<(),Box<dyn std::error::Error>> {
 
     let t3 = t.matmul(t2)?;
     assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.]);
+
+    Ok(())
+}
+
+#[test]
+fn tensor_transposed_add() -> Result<(),Box<dyn std::error::Error>> {
+    let val = vec![0.,1.,2.,3.,4.,5.];
+    let val2 = vec![5.,3.,1.,4.,2.,0.];
+    let t: Tensor<f32,2> =  Tensor::values([3,2],&val)?;
+    let mut t2: Tensor<f32,2> =  Tensor::values([2,3],&val2)?;
+
+    t2.transpose();
+
+    let t3 = (&t + &t2)?;
+
+    let expected = vec![
+        t.get([0,0])? + t2.get([0,0])?,
+        t.get([0,1])? + t2.get([0,1])?,
+        t.get([1,0])? + t2.get([1,0])?,
+        t.get([1,1])? + t2.get([1,1])?,
+        t.get([2,0])? + t2.get([2,0])?,
+        t.get([2,1])? + t2.get([2,1])?,
+    ];
+    assert_eq!(t3.data, expected);
+
+    Ok(())
+}
+
+#[test]
+fn tensor_transposed_mul() -> Result<(),Box<dyn std::error::Error>> {
+    let val = vec![0.,1.,2.,3.,4.,5.];
+    let val2 = vec![5.,3.,1.,4.,2.,0.];
+    let t: Tensor<f32,2> =  Tensor::values([3,2],&val)?;
+    let mut t2: Tensor<f32,2> =  Tensor::values([2,3],&val2)?;
+
+    t2.transpose();
+
+    let t3 = (&t * &t2)?;
+
+    let expected = vec![
+        t.get([0,0])? * t2.get([0,0])?,
+        t.get([0,1])? * t2.get([0,1])?,
+        t.get([1,0])? * t2.get([1,0])?,
+        t.get([1,1])? * t2.get([1,1])?,
+        t.get([2,0])? * t2.get([2,0])?,
+        t.get([2,1])? * t2.get([2,1])?,
+    ];
+    assert_eq!(t3.data, expected);
 
     Ok(())
 }

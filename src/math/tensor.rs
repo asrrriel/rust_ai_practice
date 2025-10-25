@@ -81,8 +81,8 @@ impl<T: Float + std::ops::AddAssign + std::ops::SubAssign + std::ops::MulAssign 
 
 //safe getter and setter
 impl<T: Float,const R: usize> Tensor<T,R>{
-    pub fn get(&self, _index: [usize; R]) -> Result<&T,TensorError> {
 
+    fn offset(&self, _index: [usize; R]) -> Result<usize,TensorError> {
         let index = match self.transposed {
             false => _index,
             true => {
@@ -109,92 +109,38 @@ impl<T: Float,const R: usize> Tensor<T,R>{
             stride *= b;
         };
 
+        Ok(idx)
+    }
+
+    fn shape(&self) -> Vec<usize> {
+        match self.transposed {
+            false => Vec::from(self.shape),
+            true => {
+                let mut temp = [0; R];
+
+                temp.copy_from_slice(&self.shape[0..R]);
+
+                let t = temp[R-1];
+                temp[R-1] = temp[R-2];
+                temp[R-2] = t;
+
+                Vec::from(temp)
+            }
+        }
+    }
+
+    pub fn get(&self, index: [usize; R]) -> Result<&T,TensorError> {
+        let idx = self.offset(index)?;
         Ok(&self.data[idx])
     }
 
-    pub fn set(&mut self, _index: [usize; R], v: T) -> Result<(),TensorError> {
-
-        let index = match self.transposed {
-            false => _index,
-            true => {
-                let mut temp = [0; R];
-
-                temp.copy_from_slice(&_index[0..R]);
-
-                let t = temp[R-1];
-                temp[R-1] = temp[R-2];
-                temp[R-2] = t;
-
-                temp
-            }
-        };
-
-        let mut idx = 0;
-        let mut stride = 1;
-
-        for (a,b) in index.into_iter().zip(self.shape).rev(){
-            if a >= b {
-                return Err(TensorError::OutOfBounds)
-            }
-            idx += a * stride;
-            stride *= b;
-        };
-
+    pub fn set(&mut self, index: [usize; R], v: T) -> Result<(),TensorError> {
+        let idx = self.offset(index)?;
         (&mut self.data)[idx] = v;
 
         Ok(())
     }
 
-}
-
-//piecewise addition opeartor
-impl<T: Float,const R: usize> Add for Tensor<T,R> {
-    type Output = Result<Tensor<T,R>,TensorError>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        if self.rank != rhs.rank || self.shape != rhs.shape{
-            return Err(TensorError::ShapeMismatch)
-        }
-
-        let data = self
-            .data
-            .into_iter()
-            .zip(rhs.data.into_iter())
-            .map(|(a, b)| a + b)
-            .collect();
-
-        Ok(Tensor{
-            rank: self.rank,
-            shape: self.shape,
-            data: data,
-            transposed: false
-        })
-    }
-}
-
-//piecewise multiplication opeartor
-impl<T: Float,const R: usize> Mul for Tensor<T,R> {
-    type Output = Result<Tensor<T,R>,TensorError>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        if self.rank != rhs.rank || self.shape != rhs.shape{
-            return Err(TensorError::ShapeMismatch)
-        }
-
-        let data = self
-            .data
-            .into_iter()
-            .zip(rhs.data.into_iter())
-            .map(|(a, b)| a * b)
-            .collect();
-
-        Ok(Tensor{
-            rank: self.rank,
-            shape: self.shape,
-            data: data,
-            transposed: false
-        })
-    }
 }
 
 //unsafe index opeartor
@@ -209,6 +155,7 @@ impl<T: Float,const R: usize> Index<[usize; R]> for Tensor<T,R> {
     }
 }
 
+
 fn idx_to_coords(idx: usize, shape: &[usize]) -> Vec<usize> {
     let mut index = idx;
     let mut result = vec![0; shape.len()];  
@@ -217,6 +164,68 @@ fn idx_to_coords(idx: usize, shape: &[usize]) -> Vec<usize> {
         index /= shape[i];
     }
     result
+}
+
+//piecewise addition opeartor
+impl<'a,T: Float,const R: usize> Add<&'a Tensor<T, R>> for &'a Tensor<T,R> {
+    type Output = Result<Tensor<T,R>,TensorError>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let myshape = self.shape();
+        let othershape = rhs.shape();
+
+        if self.rank != rhs.rank || myshape != othershape{
+            return Err(TensorError::ShapeMismatch)
+        }
+
+        let mut newtensor = Tensor::zeroes(*match myshape.as_array(){
+            Some(v) => v,
+            None => return Err(TensorError::OprationFailed) 
+        });
+
+        for i in 0..newtensor.data.len() {
+            let index = *match idx_to_coords(i, &myshape).as_array() {
+                Some(v) => v,
+                None => return Err(TensorError::OprationFailed) 
+            }; // map linear i to multi-dimensional index
+            let a_idx = self.offset(index)?;
+            let b_idx = rhs.offset(index)?;
+            newtensor.data[i] = self.data[a_idx] + rhs.data[b_idx];
+        }
+
+        Ok(newtensor)
+    }
+}
+
+//piecewise multiplication opeartor
+impl<'a,T: Float,const R: usize> Mul<&'a Tensor<T, R>> for &'a Tensor<T,R> {
+    type Output = Result<Tensor<T,R>,TensorError>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let myshape = self.shape();
+        let othershape = rhs.shape();
+
+        if self.rank != rhs.rank || myshape != othershape{
+            return Err(TensorError::ShapeMismatch)
+        }
+
+        let mut newtensor = Tensor::zeroes(*match myshape.as_array(){
+            Some(v) => v,
+            None => return Err(TensorError::OprationFailed) 
+        });
+
+        for i in 0..newtensor.data.len() {
+            let index = *match idx_to_coords(i, &myshape).as_array() {
+                Some(v) => v,
+                None => return Err(TensorError::OprationFailed) 
+            }; // map linear i to multi-dimensional index
+            let a_idx = self.offset(index)?;
+            let b_idx = rhs.offset(index)?;
+            newtensor.data[i] = self.data[a_idx] * rhs.data[b_idx];
+        }
+
+        Ok(newtensor)
+    }
 }
 
 //matrix multiplication
