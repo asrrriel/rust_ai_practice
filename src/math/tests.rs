@@ -126,7 +126,7 @@ fn tensor_shape_mismatch() -> Result<(),Box<dyn std::error::Error>> {
     let t3 = t * t2;
     assert!(t3.is_err());
     assert!(match t3 {
-        Err(e) => e.as_ref().is::<TensorError>(),
+        Err(e) => e == TensorError::ShapeMismatch,
         _ => false
     });
 
@@ -152,6 +152,32 @@ fn tensor_index_oob() -> Result<(),Box<dyn std::error::Error>> {
     let val_2d = vec![0.,1.,2.,3.,4.,5.];
     let mut _2d: Tensor<f32,2> =  Tensor::values([2,3],&val_2d)?;
     assert!(_2d.get([0,10]).is_err());
+
+    Ok(())
+}
+
+#[test]
+fn tensor_matmul() -> Result<(),Box<dyn std::error::Error>> {
+    let val = vec![0.,1.,2.,3.,4.,5.];
+    let val2 = vec![0.,1.,2.,3.,4.,5.];
+    let t: Tensor<f32,2> =  Tensor::values([3,2],&val)?;
+    let t2: Tensor<f32,2> =  Tensor::values([2,3],&val2)?;
+
+    let t3 = t.matmul(t2)?;
+    assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.]);
+
+    Ok(())
+}
+
+#[test]
+fn tensor_matmul_batched() -> Result<(),Box<dyn std::error::Error>> {
+    let val = vec![0.,1.,2.,3.,4.,5.,0.,1.,2.,3.,4.,5.];
+    let val2 = vec![0.,1.,2.,3.,4.,5.,0.,1.,2.,3.,4.,5.];
+    let t: Tensor<f32,3> =  Tensor::values([2,3,2],&val)?;
+    let t2: Tensor<f32,3> =  Tensor::values([2,2,3],&val2)?;
+
+    let t3 = t.matmul(t2)?;
+    assert_eq!(t3.data,[3.,4.,5.,9.,14.,19.,15.,24.,33.,3.,4.,5.,9.,14.,19.,15.,24.,33.,]);
 
     Ok(())
 }
