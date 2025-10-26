@@ -41,19 +41,19 @@ impl MNISTSolver {
     fn init() -> Result<MNISTSolver, Box<dyn std::error::Error>> {
         let mut rng = rand::rng();
 
-        let mut percw = vec![0.; 784*256];
+        let mut percw = vec![0.; 784*64];
 
         percw.fill_with(|| {
             rng.random_range(-1.0..1.0)
         });
 
-        let mut percb = vec![0.; 256];
+        let mut percb = vec![0.; 64];
 
         percb.fill_with(|| {
             rng.random_range(-1.0..1.0)
         });
 
-        let mut perc2w = vec![0.; 256*10];
+        let mut perc2w = vec![0.; 64*10];
 
         perc2w.fill_with(|| {
             rng.random_range(-1.0..1.0)
@@ -66,19 +66,19 @@ impl MNISTSolver {
         });
 
         let perc: PercLayer<f32> = PercLayer {
-            w: Tensor::values([256, 784], &percw)?,
-            b: Tensor::values([256],&percb)?,
+            w: Tensor::values([64, 784], &percw)?,
+            b: Tensor::values([64],&percb)?,
             saved_x: Tensor::zeroes([784]),
         };
 
         let sigm: SigmoidLayer<f32> = SigmoidLayer{
-            saved_x: Tensor::zeroes([256]),
+            saved_x: Tensor::zeroes([64]),
         };
 
         let perc2: PercLayer<f32> = PercLayer {
-            w: Tensor::values([10, 256], &perc2w)?,
+            w: Tensor::values([10, 64], &perc2w)?,
             b: Tensor::values([10],&perc2b)?,
-            saved_x: Tensor::zeroes([256]),
+            saved_x: Tensor::zeroes([64]),
         };
 
         let sigm2: SigmoidLayer<f32> = SigmoidLayer{
@@ -141,13 +141,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
     let mut model = MNISTSolver::init()?;
 
     const EPOCHS: usize = 10;
-    const LEARNING_RATE: f32 = 0.1;
+    const LEARNING_RATE: f32 = 0.01;
 
-    let mut sum_loss: f32;
+    let mut sum_loss: f32 = 0.;
 
     for i in 0..EPOCHS {
-        sum_loss = 0.;
         println!("Epoch {0}, avg loss: {1}",i,sum_loss / training_data.len() as f32);
+        sum_loss = 0.;
         for d in &training_data {
             let forwards = model.forwards(&d.i)?;
 
