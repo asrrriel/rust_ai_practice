@@ -1,5 +1,6 @@
 #![feature(slice_as_array)]
 mod math;
+mod loader;
 mod layers;
 
 use core::panic;
@@ -8,6 +9,9 @@ use rand::Rng;
 use math::tensor::Tensor;
 use layers::{prec::*,sigm::*};
 
+use crate::loader::load_mnist_train;
+
+#[derive(Clone)]
 struct TrainingData{
     i: Tensor<f32,1>,
     o: Tensor<f32,1>
@@ -24,7 +28,7 @@ fn reconstruction_loss_der(x: f32, r: f32) -> f32{
     x - r
 }
 
-struct SimplePreceptron {
+struct MNISTSolver {
     perc: PercLayer<f32>,
     sigm: SigmoidLayer<f32>,
     perc2: PercLayer<f32>,
@@ -33,30 +37,55 @@ struct SimplePreceptron {
     perc2_grad: Option<PercGradient<f32>>
 }
 
-impl SimplePreceptron {
-    fn init() -> Result<SimplePreceptron, Box<dyn std::error::Error>> {
+impl MNISTSolver {
+    fn init() -> Result<MNISTSolver, Box<dyn std::error::Error>> {
         let mut rng = rand::rng();
+
+        let mut percw = vec![0.; 784*256];
+
+        percw.fill_with(|| {
+            rng.random_range(-1.0..1.0)
+        });
+
+        let mut percb = vec![0.; 256];
+
+        percb.fill_with(|| {
+            rng.random_range(-1.0..1.0)
+        });
+
+        let mut perc2w = vec![0.; 256*10];
+
+        perc2w.fill_with(|| {
+            rng.random_range(-1.0..1.0)
+        });
+
+        let mut perc2b = vec![0.; 10];
+
+        perc2b.fill_with(|| {
+            rng.random_range(-1.0..1.0)
+        });
+
         let perc: PercLayer<f32> = PercLayer {
-            w: Tensor::values([2, 2], &vec![rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0),rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0)])?,
-            b: Tensor::values([2],&vec![rng.random_range(-1.0..1.0),rng.random_range(-1.0..1.0)])?,
-            saved_x: Tensor::zeroes([2]),
+            w: Tensor::values([256, 784], &percw)?,
+            b: Tensor::values([256],&percb)?,
+            saved_x: Tensor::zeroes([784]),
         };
 
         let sigm: SigmoidLayer<f32> = SigmoidLayer{
-            saved_x: Tensor::zeroes([2]),
+            saved_x: Tensor::zeroes([256]),
         };
 
         let perc2: PercLayer<f32> = PercLayer {
-            w: Tensor::values([1, 2], &vec![rng.random_range(-1.0..1.0), rng.random_range(-1.0..1.0)])?,
-            b: Tensor::values([1],&vec![rng.random_range(-1.0..1.0)])?,
-            saved_x: Tensor::zeroes([2]),
+            w: Tensor::values([10, 256], &perc2w)?,
+            b: Tensor::values([10],&perc2b)?,
+            saved_x: Tensor::zeroes([256]),
         };
 
         let sigm2: SigmoidLayer<f32> = SigmoidLayer{
-            saved_x: Tensor::zeroes([1]),
+            saved_x: Tensor::zeroes([10]),
         };
 
-        Ok(SimplePreceptron { perc: perc, sigm: sigm, perc2: perc2, sigm2: sigm2, perc_grad: None, perc2_grad: None })
+        Ok(MNISTSolver { perc: perc, sigm: sigm, perc2: perc2, sigm2: sigm2, perc_grad: None, perc2_grad: None })
     }
 
     fn forwards(&mut self,x: &Tensor<f32,1>) -> Result<Tensor<f32, 1>, Box<dyn std::error::Error>> {
@@ -107,42 +136,18 @@ impl SimplePreceptron {
 
 
 fn main() -> Result<(), Box<dyn std::error::Error>>{
-    let training_data: [TrainingData; _] = [
-        TrainingData{
-            i: Tensor::<f32,1>::values([2], &vec![0.,0.])?,
-            o: Tensor::<f32,1>::values([1], &vec![0.])?,
-        },
-        TrainingData{
-            i: Tensor::<f32,1>::values([2], &vec![1.,0.])?,
-            o: Tensor::<f32,1>::values([1], &vec![1.])?,
-        },
-        TrainingData{
-            i: Tensor::<f32,1>::values([2], &vec![0.,1.])?,
-            o: Tensor::<f32,1>::values([1], &vec![1.])?,
-        },
-        TrainingData{
-            i: Tensor::<f32,1>::values([2], &vec![1.,1.])?,
-            o: Tensor::<f32,1>::values([1], &vec![0.])?,
-        },
-    ];
+    let training_data = load_mnist_train::<10000>("t10k-images-idx3-ubyte", "t10k-labels-idx1-ubyte")?;
 
-    let mut model = SimplePreceptron::init()?;
+    let mut model = MNISTSolver::init()?;
 
+    const EPOCHS: usize = 10;
+    const LEARNING_RATE: f32 = 0.1;
 
-
-    const EPOCHS: usize = 100000;
-    const LEARNING_RATE: f32 = 0.01;
-
-    let mut sum_loss = 0.;
+    let mut sum_loss: f32;
 
     for i in 0..EPOCHS {
-        println!("Epoch {0}, avg loss: {1}",i,sum_loss / training_data.len() as f32);
-        println!("Sample 0: {0}",model.forwards(&training_data[0].i)?);
-        println!("Sample 1: {0}",model.forwards(&training_data[1].i)?);
-        println!("Sample 2: {0}",model.forwards(&training_data[2].i)?);
-        println!("Sample 3: {0}\n",model.forwards(&training_data[3].i)?);
-
         sum_loss = 0.;
+        println!("Epoch {0}, avg loss: {1}",i,sum_loss / training_data.len() as f32);
         for d in &training_data {
             let forwards = model.forwards(&d.i)?;
 
@@ -158,11 +163,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>>{
         }
     }
 
-    println!("weights: {0}",model.perc.w);
-    println!("biases: {0}",model.perc.b);
+    println!("layer 1 weights: {0}",model.perc.w);
+    println!("layer 1 biases: {0}",model.perc.b);
 
-    println!("weights2: {0}",model.perc2.w);
-    println!("biases2: {0}",model.perc2.b);
+    println!("layer 2 weights: {0}",model.perc2.w);
+    println!("layer 2 biases: {0}",model.perc2.b);
 
     Ok(())
 }

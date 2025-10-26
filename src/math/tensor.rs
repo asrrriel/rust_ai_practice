@@ -19,10 +19,10 @@ impl std::error::Error for TensorError {}
 
 #[derive(Clone)]
 pub struct Tensor<T: Float,const R: usize> {
-    rank: usize,
-    shape: [usize; R],
+    pub rank: usize,
+    pub shape: [usize; R],
     pub data: Vec<T>,
-    transposed: bool // swaps last 2 dimensions on index if true
+    pub transposed: bool // swaps last 2 dimensions on index if true
 }
 
 //constructors
